@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 
 # Configurazione del database (file SQLite nella stessa cartella)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///air_quality.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sistema_monitoraggio.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Collegamento con SQLAlchemy
