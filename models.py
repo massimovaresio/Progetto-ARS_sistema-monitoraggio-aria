@@ -1,7 +1,6 @@
-from app import db
+from database import db
 import datetime
 
-# Tabella utenti
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -11,7 +10,6 @@ class User(db.Model):
     def __repr__(self):
         return f'<User {self.username}>'
 
-# Tabella qualità dell'aria
 class AirQuality(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     city = db.Column(db.String(50), nullable=False)
