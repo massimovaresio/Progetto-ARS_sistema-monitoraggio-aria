@@ -17,3 +17,4 @@ class AirQuality(db.Model):
     pm10 = db.Column(db.Float)
     pm2_5 = db.Column(db.Float)
     o3 = db.Column(db.Float)
+    no2 = db.Column(db.Float)
