@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, render_template
 from werkzeug.security import generate_password_hash, check_password_hash
 from database import db
 from datetime import datetime, timedelta
@@ -154,6 +154,41 @@ def importa_dati():
 
     fetch_and_store_data(comune, start_date, end_date)
     return jsonify({"message": f"Dati per {comune} importati con successo"}), 200
+
+@app.route('/dashboard')
+def dashboard():
+    comuni = sorted(station_map.keys())  # estrai elenco dei comuni dal JSON
+    return render_template('dashboard.html', comuni=comuni)
+
+@app.route('/dati_comune')
+def dati_comune():
+    comune = request.args.get('comune')
+    start = request.args.get('start')
+    end = request.args.get('end')
+
+    if not comune or not start or not end:
+        return jsonify({"error": "Parametri mancanti"}), 400
+
+    start_date = datetime.strptime(start, "%Y-%m-%d")
+    end_date = datetime.strptime(end, "%Y-%m-%d")
+
+    dati = AirQuality.query.filter(
+        AirQuality.city == comune,
+        AirQuality.timestamp >= start_date,
+        AirQuality.timestamp <= end_date
+    ).order_by(AirQuality.timestamp).all()
+
+    risultato = []
+    for r in dati:
+        risultato.append({
+            "data": r.timestamp.strftime("%Y-%m-%d"),
+            "pm10": r.pm10,
+            "pm2_5": r.pm2_5,
+            "o3": r.o3,
+            "no2": r.no2
+        })
+
+    return jsonify(risultato)
 
 @app.route('/logout')
 def logout():

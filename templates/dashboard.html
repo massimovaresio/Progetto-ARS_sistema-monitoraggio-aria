@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-5">
+  <h2 class="mb-4">Monitoraggio Qualità dell'Aria</h2>
+
+  <form id="import-form" class="row g-3">
+    <div class="col-md-4">
+      <label for="comune" class="form-label">Comune</label>
+      <select class="form-select" id="comune" required>
+        {% for comune in comuni %}
+        <option value="{{ comune }}">{{ comune }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label for="start-date" class="form-label">Data inizio</label>
+      <input type="date" class="form-control" id="start-date" required>
+    </div>
+    <div class="col-md-3">
+      <label for="end-date" class="form-label">Data fine</label>
+      <input type="date" class="form-control" id="end-date" required>
+    </div>
+    <div class="col-md-2 align-self-end">
+      <button type="submit" class="btn btn-primary w-100">Importa</button>
+    </div>
+  </form>
+
+  <div id="loading-alert" class="alert alert-info d-none mt-4" role="alert">
+    Importazione in corso... Attendere qualche secondo.
+  </div>
+
+  <hr class="my-4">
+
+  <h4>Dati Importati</h4>
+  <table class="table table-striped" id="dati-tabella">
+    <thead>
+      <tr>
+        <th>Comune</th>
+        <th>Data</th>
+        <th>PM10</th>
+        <th>PM2.5</th>
+        <th>O3</th>
+        <th>NO2</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <canvas id="grafico" height="100"></canvas>
+  <div id="giudizio" class="mt-4 fs-5 text-center text-primary"></div>
+</div>
+
+<script>
+  const form = document.getElementById("import-form");
+  const tabella = document.querySelector("#dati-tabella tbody");
+  const ctx = document.getElementById("grafico").getContext("2d");
+  const loading = document.getElementById("loading-alert");
+  const giudizioBox = document.getElementById("giudizio");
+  let chart;
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const comune = document.getElementById("comune").value;
+    const start = document.getElementById("start-date").value;
+    const end = document.getElementById("end-date").value;
+
+    loading.classList.remove("d-none");
+    giudizioBox.textContent = "";
+
+    const resImport = await fetch(`/import_data?comune=${comune}&start=${start}&end=${end}`);
+    if (!resImport.ok) return alert("Errore nell'importazione dei dati");
+
+    const resDati = await fetch(`/dati_comune?comune=${comune}&start=${start}&end=${end}`);
+    const dati = await resDati.json();
+
+    tabella.innerHTML = "";
+    const labels = [], pm10 = [], pm2_5 = [], o3 = [], no2 = [];
+
+    dati.forEach(riga => {
+      tabella.innerHTML += `
+        <tr>
+          <td>${comune}</td>
+          <td>${riga.data}</td>
+          <td>${riga.pm10 ?? '-'}</td>
+          <td>${riga.pm2_5 ?? '-'}</td>
+          <td>${riga.o3 ?? '-'}</td>
+          <td>${riga.no2 ?? '-'}</td>
+        </tr>`;
+
+      labels.push(riga.data);
+      pm10.push(riga.pm10);
+      pm2_5.push(riga.pm2_5);
+      o3.push(riga.o3);
+      no2.push(riga.no2);
+    });
+
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'PM10', data: pm10, borderWidth: 2 },
+          { label: 'PM2.5', data: pm2_5, borderWidth: 2 },
+          { label: 'O3', data: o3, borderWidth: 2 },
+          { label: 'NO2', data: no2, borderWidth: 2 }
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    });
+
+    loading.classList.add("d-none");
+
+    const media = (arr) => arr.filter(v => v !== null && v !== undefined).reduce((a, b) => a + b, 0) / arr.length;
+    const media_pm10 = media(pm10);
+    let giudizio = "Dati insufficienti per valutazione.";
+    if (media_pm10 <= 20) giudizio = "✅ Qualità dell'aria OTTIMA";
+    else if (media_pm10 <= 35) giudizio = "🙂 Qualità dell'aria BUONA";
+    else if (media_pm10 <= 50) giudizio = "😐 Qualità dell'aria ACCETTABILE";
+    else giudizio = "⚠️ Qualità dell'aria SCARSA";
+
+    giudizioBox.textContent = giudizio;
+  });
+</script>
+{% endblock %}
