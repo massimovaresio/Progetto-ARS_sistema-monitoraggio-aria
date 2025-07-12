@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from database import db
 from datetime import datetime, timedelta
-import requests, csv, io
+import requests, csv, io, json
 
 app = Flask(__name__)
 app.secret_key = 'chiave-segreta-sicura'
@@ -10,6 +10,10 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sistema_monitoraggio.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
+
+# Carica la mappa comune → lista di id_station
+with open("station_map.json", "r", encoding="utf-8") as f:
+    station_map = json.load(f)
 
 from models import User, AirQuality
 
@@ -30,7 +34,9 @@ def authenticate_user(username, password):
         return user
     return None
 
-def fetch_and_store_data(station_id, start_date_str, end_date_str):
+def fetch_and_store_data(comune, start_date_str, end_date_str):
+    from statistics import mean
+
     pollutant_ids = {
         "pm10": "3",
         "pm2_5": "7",
@@ -38,48 +44,55 @@ def fetch_and_store_data(station_id, start_date_str, end_date_str):
         "o3": "5"
     }
 
+    station_ids = station_map.get(comune)
+    if not station_ids:
+        print(f"Nessuna stazione trovata per il comune '{comune}'")
+        return
+
     start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
     end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
-
     current_date = start_date
+
     while current_date <= end_date:
         data_str = current_date.strftime("%Y-%m-%d")
-        valori = {}
-        city = None
+        aggregated = {}
 
-        for name, pollutant_id in pollutant_ids.items():
-            url = (
-                f"https://dati.arpa.puglia.it/api/v1/measurements?"
-                f"format=CSV&measurement_date={data_str}"
-                f"&id_station={station_id}&id_pollutant={pollutant_id}"
-            )
+        for inquinante, pollutant_id in pollutant_ids.items():
+            valori = []
 
-            try:
-                resp = requests.get(url)
-                resp.raise_for_status()
-                csv_file = io.StringIO(resp.text)
-                reader = csv.DictReader(csv_file)
-                row = next(reader, None)
-                if row:
-                    valore = row["valore_inquinante_misurato"]
-                    if valore and valore.lower() != "null":
-                        valori[name] = float(valore)
-                        if not city:
-                            city = row["comune"]
-            except Exception:
-                continue
+            for station_id in station_ids:
+                url = (
+                    f"https://dati.arpa.puglia.it/api/v1/measurements?"
+                    f"format=CSV&measurement_date={data_str}"
+                    f"&id_station={station_id}&id_pollutant={pollutant_id}"
+                )
 
-        if valori and city:
-            timestamp = datetime.strptime(data_str, "%Y-%m-%d")
-            existing = AirQuality.query.filter_by(city=city, timestamp=timestamp).first()
+                try:
+                    resp = requests.get(url)
+                    resp.raise_for_status()
+                    csv_file = io.StringIO(resp.text)
+                    reader = csv.DictReader(csv_file)
+                    row = next(reader, None)
+                    if row:
+                        val = row["valore_inquinante_misurato"]
+                        if val and val.lower() != "null":
+                            valori.append(float(val))
+                except Exception:
+                    continue
+
+            if valori:
+                aggregated[inquinante] = mean(valori)
+
+        if aggregated:
+            existing = AirQuality.query.filter_by(city=comune, timestamp=current_date).first()
             if not existing:
                 record = AirQuality(
-                    city=city,
-                    timestamp=timestamp,
-                    pm10=valori.get("pm10"),
-                    pm2_5=valori.get("pm2_5"),
-                    o3=valori.get("o3"),
-                    no2=valori.get("no2")
+                    city=comune,
+                    timestamp=current_date,
+                    pm10=aggregated.get("pm10"),
+                    pm2_5=aggregated.get("pm2_5"),
+                    o3=aggregated.get("o3"),
+                    no2=aggregated.get("no2")
                 )
                 db.session.add(record)
                 db.session.commit()
@@ -130,17 +143,17 @@ def profilo():
         'email': user.email
     })
 
-@app.route('/import_csv')
-def importa_csv():
-    station_id = request.args.get('station')
+@app.route('/import_data')
+def importa_dati():
+    comune = request.args.get('comune')
     start_date = request.args.get('start')
     end_date = request.args.get('end')
 
-    if not station_id or not start_date or not end_date:
+    if not comune or not start_date or not end_date:
         return jsonify({"error": "Parametri mancanti"}), 400
 
-    fetch_and_store_data(station_id, start_date, end_date)
-    return jsonify({"message": "Importazione completata"}), 200
+    fetch_and_store_data(comune, start_date, end_date)
+    return jsonify({"message": f"Dati per {comune} importati con successo"}), 200
 
 @app.route('/logout')
 def logout():
