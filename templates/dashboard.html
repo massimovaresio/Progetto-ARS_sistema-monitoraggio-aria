@@ -51,6 +51,18 @@
 </div>
 
 <script>
+  // Mostra messaggio di benvenuto con nome utente (se autenticato)
+  fetch("/profilo")
+    .then(res => res.ok ? res.json() : null)
+    .then(data => {
+      if (data) {
+        const msg = document.createElement("div");
+        msg.className = "alert alert-info text-center";
+        msg.textContent = `Bentornato, ${data.username}!`;
+        document.querySelector(".container").prepend(msg);
+      }
+    });
+
   const form = document.getElementById("import-form");
   const tabella = document.querySelector("#dati-tabella tbody");
   const ctx = document.getElementById("grafico").getContext("2d");

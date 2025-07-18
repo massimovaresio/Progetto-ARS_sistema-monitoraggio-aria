@@ -99,38 +99,45 @@ def fetch_and_store_data(comune, start_date_str, end_date_str):
 
         current_date += timedelta(days=1)
 
-@app.route('/register', methods=['POST'])
+@app.route('/register', methods=['GET', 'POST'])
 def register():
-    data = request.get_json()
-    username = data.get('username')
-    email = data.get('email')
-    password = data.get('password')
+    if request.method == 'POST':
+        data = request.get_json()
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
 
-    if not username or not email or not password:
-        return jsonify({'error': 'Dati mancanti'}), 400
+        if not username or not email or not password:
+            return jsonify({'error': 'Dati mancanti'}), 400
 
-    if User.query.filter((User.username == username) | (User.email == email)).first():
-        return jsonify({'error': 'Utente già registrato'}), 409
+        if User.query.filter((User.username == username) | (User.email == email)).first():
+            return jsonify({'error': 'Utente già registrato'}), 409
 
-    register_user(username, email, password)
-    return jsonify({'message': f'Utente {username} registrato con successo'}), 201
+        register_user(username, email, password)
+        return jsonify({'message': f'Utente {username} registrato con successo'}), 201
 
-@app.route('/login', methods=['POST'])
+    # Con metodo GET, restituisce la pagina HTML
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
+    if request.method == 'POST':
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
 
-    if not username or not password:
-        return jsonify({'error': 'Credenziali mancanti'}), 400
+        if not username or not password:
+            return jsonify({'error': 'Credenziali mancanti'}), 400
 
-    user = authenticate_user(username, password)
+        user = authenticate_user(username, password)
+        if user:
+            session['user_id'] = user.id
+            return jsonify({'message': f'Benvenuto {user.username}'}), 200
+        else:
+            return jsonify({'error': 'Username o password errati'}), 401
 
-    if user:
-        session['user_id'] = user.id
-        return jsonify({'message': f'Benvenuto {user.username}'}), 200
-    else:
-        return jsonify({'error': 'Username o password errati'}), 401
+    # Con metodo GET, restituisce la pagina HTML
+    return render_template('login.html')
     
 @app.route('/profilo')
 def profilo():
